@@ -9,7 +9,6 @@ before_install:
 script:
   - go test -v -coverprofile=ebml.coverprofile ./ebml
   - go test -v -coverprofile=matroska.coverprofile ./matroska
-  - echo 'mode\: set' > .coverage
-  - grep -h -v 'mode\: set' *.coverprofile >> .coverage
+  - 'echo "mode: set" > .coverage && grep -h -v "mode: set" *.coverprofile >> .coverage'
   - $HOME/gopath/bin/goveralls -coverprofile=.coverage -service=travis-ci
   - $HOME/gopath/bin/golint ./...
