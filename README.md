@@ -1,4 +1,4 @@
-# Golang Matroska and WebM Container Format Implementation
+# Golang implementation of Matroska and WebM media container formats
 
 [![Build Status](https://travis-ci.org/pixelbender/go-matroska.svg)](https://travis-ci.org/pixelbender/go-matroska)
 [![Coverage Status](https://coveralls.io/repos/github/pixelbender/go-matroska/badge.svg?branch=master)](https://coveralls.io/github/pixelbender/go-matroska?branch=master)
@@ -14,8 +14,11 @@ go get github.com/pixelbender/go-matroska
 ## Usage
 
 ```go
-import "github.com/pixelbender/go-matroska/matroska"
-import "os"
+import (
+    "github.com/pixelbender/go-matroska/ebml"
+    "github.com/pixelbender/go-matroska/matroska"
+    "os"
+)
 
 func main() {
     reader, err := os.Open("example.mkv")
@@ -23,15 +26,15 @@ func main() {
     defer reader.Close()
     
     file := new(matroska.File)
-    dec := NewDecoder(reader)
+    dec := ebml.NewDecoder(reader)
     err = dec.Decode(file)
-    
     // Handle decoding errors
+    
 }
 
 ```
 
 ## Specifications
 
-- [ ] [Matroska Media Container - Specifications](https://matroska.org/technical/specs/index.html)
-- [ ] [WebM Container - Guidelines](https://www.webmproject.org/docs/container/)
+- [Matroska Media Container - Specifications](https://matroska.org/technical/specs/index.html)
+- [WebM Container - Guidelines](https://www.webmproject.org/docs/container/)
