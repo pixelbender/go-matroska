@@ -5,8 +5,11 @@ go:
 before_install:
   - go get github.com/mattn/goveralls
   - go get golang.org/x/tools/cmd/cover
+  - go get github.com/modocache/gover
   - go get github.com/golang/lint/golint
 script:
   - go test -v ./...
-  - $HOME/gopath/bin/goveralls -service=travis-ci
+  - go list -f '{{if len .TestGoFiles}}"go test -coverprofile={{.Dir}}/.coverprofile {{.ImportPath}}"{{end}}' ./... | xargs sh -c
+  - gover
+  - $HOME/gopath/bin/goveralls -coverprofile=gover.coverprofile -service=travis-ci
   - $HOME/gopath/bin/golint ./...
