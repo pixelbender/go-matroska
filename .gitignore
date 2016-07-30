@@ -2,3 +2,6 @@
 
 bin/
 pkg/
+
+*.coverprofile
+*.coverage
