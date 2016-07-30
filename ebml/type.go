@@ -165,7 +165,7 @@ func (f *fieldInfo) decode(v reflect.Value, dec *Decoder) error {
 	case reflect.Ptr:
 		e := v.Type().Elem()
 		if e.Kind() != reflect.Struct {
-			return UnmarshalerError(v.Type())
+			return &UnmarshalerError{v.Type()}
 		}
 		if v.IsNil() {
 			v.Set(reflect.New(e))
@@ -195,7 +195,7 @@ func (f *fieldInfo) decode(v reflect.Value, dec *Decoder) error {
 		}
 
 		if e.Kind() != reflect.Ptr {
-			return UnmarshalerError(v.Type())
+			return &UnmarshalerError{v.Type()}
 		}
 		it := reflect.New(e.Elem())
 		v.Set(reflect.Append(v, it))
@@ -237,7 +237,7 @@ func (f *fieldInfo) decode(v reflect.Value, dec *Decoder) error {
 		}
 		v.SetString(s)
 	default:
-		return UnmarshalerError(v.Type())
+		return &UnmarshalerError{v.Type()}
 	}
 	return nil
 }

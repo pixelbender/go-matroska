@@ -19,10 +19,12 @@ type Unmarshaler interface {
 }
 
 // An UnmarshalerError describes an invalid argument passed to Decode.
-type UnmarshalerError reflect.Type
+type UnmarshalerError struct {
+	Type reflect.Type
+}
 
 func (e *UnmarshalerError) Error() string {
-	return "ebml: Unmarshal(" + reflect.Type(e).String() + ")"
+	return "ebml: Unmarshal(" + reflect.Type(e.Type).String() + ")"
 }
 
 // ErrFormat describes EBML format error
