@@ -18,9 +18,15 @@ type Unmarshaler interface {
 	UnmarshalEBML(dec *Decoder) error
 }
 
-// TODO: create error structs
+// An UnmarshalerError describes an invalid argument passed to Decode.
+type UnmarshalerError reflect.Type
+
+func (e *UnmarshalerError) Error() string {
+	return "ebml: Unmarshal(" + reflect.Type(e).String() + ")"
+}
+
+// ErrFormat describes EBML format error
 var ErrFormat = errors.New("ebml: not a valid format")
-var ErrReadSequence = errors.New("ebml: read error")
 
 var mask = []byte{0x80, 0x40, 0x20, 0x10, 0x8, 0x4, 0x2, 0x1}
 var rest = []byte{0xff, 0x7f, 0x3f, 0x1f, 0xf, 0x7, 0x3, 0x1, 0x0}
@@ -156,7 +162,7 @@ func (dec *Decoder) Skip() (err error) {
 	}
 	n := int64(dec.buf.Buffered())
 	if dec.rs != nil && dec.len > n {
-		if _, err = dec.rs.Seek(dec.len - n, 1); err != nil {
+		if _, err = dec.rs.Seek(dec.len-n, 1); err != nil {
 			return
 		}
 		dec.buf.Reset(dec.rs)
@@ -285,8 +291,8 @@ func (dec *Decoder) readVint(off int) (v int64, n int, err error) {
 	dec.len--
 	var bit byte
 	for n, bit = range mask {
-		if m & bit != 0 {
-			v = int64(m & rest[n + off])
+		if m&bit != 0 {
+			v = int64(m & rest[n+off])
 			break
 		}
 	}

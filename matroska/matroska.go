@@ -25,7 +25,7 @@ type EBML struct {
 	DocTypeReadVersion int    `ebml:"4285"`
 }
 
-// NewEBML creates EBML top level element with default values
+// NewEBML creates EBML top level element with default values.
 func NewEBML() *EBML {
 	return &EBML{1, 1, 4, 8, "matroska", 1, 1}
 }
@@ -61,12 +61,12 @@ type SegmentInfo struct {
 	Translate     []*ChapterTranslate `ebml:"6924"`
 }
 
-// NewSegmentInfo creates SegmentInfo element with default values
+// NewSegmentInfo creates SegmentInfo element with default values.
 func NewSegmentInfo() *SegmentInfo {
 	return &SegmentInfo{TimecodeScale: 1000000}
 }
 
-// ChapterTranslate contains tuple of corresponding ID used by chapter codecs to represent a Segment
+// ChapterTranslate contains tuple of corresponding ID used by chapter codecs to represent a Segment.
 type ChapterTranslate struct {
 	EditionUID int64  `ebml:"69FC,omitempty"`
 	Codec      int64  `ebml:"69BF"`
@@ -186,7 +186,7 @@ func (r *Block) String() string {
 	return "Block{" + strconv.Itoa(len(r.Data)) + " bytes}"
 }
 
-// BlockGroup contains a single Block and a relative information
+// BlockGroup contains a single Block and a relative information.
 type BlockGroup struct {
 	Block             *Block           `ebml:"A1"`
 	Additions         []*BlockAddition `ebml:"75A1>A6,omitempty"`

@@ -21,13 +21,13 @@ import (
 )
 
 func main() {
-    reader, err := os.Open("example.mkv")
+    r, err := os.Open("example.mkv")
     // Handle filesystem errors
-    defer reader.Close()
+    defer r.Close()
     
-    file := new(matroska.File)
-    dec := ebml.NewDecoder(reader)
-    err = dec.Decode(file)
+    f := new(matroska.File)
+    dec := ebml.NewDecoder(r)
+    err = dec.Decode(f)
     // Handle decoding errors
     
 }
