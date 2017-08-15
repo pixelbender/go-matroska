@@ -8,30 +8,26 @@
 ## Installation
 
 ```sh
-go get github.com/pixelbender/go-matroska
+go get github.com/pixelbender/go-matroska/...
 ```
 
 ## Usage
 
 ```go
 import (
-    "github.com/pixelbender/go-matroska/ebml"
-    "github.com/pixelbender/go-matroska/matroska"
     "os"
+    "fmt"
+    "github.com/pixelbender/go-matroska/matroska"
 )
 
 func main() {
-    r, err := os.Open("example.mkv")
-    // Handle filesystem errors
-    defer r.Close()
-    
-    f := new(matroska.File)
-    dec := ebml.NewDecoder(r)
-    err = dec.Decode(f)
-    // Handle decoding errors
-    
+    doc, err := matroska.Decode("example.mkv")
+    if err != nil {
+        fmt.Println(err)
+        return
+    }
+    fmt.Println(doc.Segment.Info[0].Duration)
 }
-
 ```
 
 ## Specifications

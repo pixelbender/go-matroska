@@ -2,400 +2,585 @@ package matroska
 
 import (
 	"github.com/pixelbender/go-matroska/ebml"
-	"strconv"
+	"log"
+	"os"
 	"time"
 )
 
-// File represents a Matroska file.
+func Decode(file string) (*File, error) {
+	r, err := os.Open(file)
+	if err != nil {
+		return nil, err
+	}
+	dec := ebml.NewReader(r, &ebml.DecodeOptions{
+		SkipDamaged: true,
+	})
+	v := new(File)
+	if err = dec.Decode(&v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// File represents a Matroska encoded file.
 // See the specification https://matroska.org/technical/specs/index.html
 type File struct {
-	EBML    *EBML      `ebml:"1A45DFA3"`
-	Segment []*Segment `ebml:"18538067"`
+	EBML    *EBML    `ebml:"1A45DFA3"`
+	Segment *Segment `ebml:"18538067"`
 }
 
-// The EBML top level element contains a description of the file type, such as EBML
-// version, file type name, file type version etc.
+func NewFile(doctype string) *File {
+	return &File{
+		EBML:    &EBML{1, 1, 4, 8, doctype, 1, 1},
+		Segment: &Segment{},
+	}
+}
+
+// The EBML is a top level element contains a description of the file type.
 type EBML struct {
-	Version            int    `ebml:"4286"`
-	ReadVersion        int    `ebml:"42F7"`
-	MaxIDLength        int    `ebml:"42F2"`
-	MaxSizeLength      int    `ebml:"42F3"`
-	DocType            string `ebml:"4282"`
-	DocTypeVersion     int    `ebml:"4287"`
-	DocTypeReadVersion int    `ebml:"4285"`
+	Version            int    `ebml:"4286,1"`
+	ReadVersion        int    `ebml:"42F7,1"`
+	MaxIDLength        int    `ebml:"42F2,4"`
+	MaxSizeLength      int    `ebml:"42F3,8"`
+	DocType            string `ebml:"4282,matroska"`
+	DocTypeVersion     int    `ebml:"4287,1"`
+	DocTypeReadVersion int    `ebml:"4285,1"`
 }
 
-// NewEBML creates EBML top level element with default values.
-func NewEBML() *EBML {
-	return &EBML{1, 1, 4, 8, "matroska", 1, 1}
-}
+// ID is a binary EBML element identifier.
+type ID uint32
 
-// A Segment contains multimedia data, as well as any header data necessary for replay.
+// SegmentID is a randomly generated unique 128bit identifier of Segment/SegmentFamily.
+type SegmentID []byte
+
+// EditionID is a unique identifier of Edition.
+type EditionID []byte
+
+type Position int64
+type Time int64
+type Duration int64
+
+// Segment is the Root Element that contains all other Top-Level Elements.
 type Segment struct {
-	Info        []*SegmentInfo `ebml:"1549A966"`
-	SeekHead    []*SeekHead    `ebml:"114D9B74,omitempty"`
-	Tracks      []*Track       `ebml:"1654AE6B>AE,omitempty"`
-	Cluster     []*Cluster     `ebml:"1F43B675,omitempty"`
-	Cues        []*CuePoint    `ebml:"1C53BB6B>BB,omitempty"`
-	Attachments []*Attachment  `ebml:"1941A469>61A7"`
-	Chapters    []*Chapter     `ebml:"1043A770>45B9"`
-	Tags        []*Tag         `ebml:"1254C367>7373"`
+	SeekHead    []*SeekHead   `ebml:"114D9B74,omitempty" json:",omitempty"`
+	Info        []*Info       `ebml:"1549A966" json:",omitempty"`
+	Cluster     []*Cluster    `ebml:"1F43B675,omitempty" json:",omitempty"`
+	Tracks      []*Track      `ebml:"1654AE6B,omitempty" json:",omitempty"`
+	Cues        []*CuePoint   `ebml:"1C53BB6B>BB,omitempty" json:",omitempty"`
+	Attachments []*Attachment `ebml:"1941A469>61A7"`
+	Chapters    []*Edition    `ebml:"1043A770>45B9"`
+	Tags        []*Tag        `ebml:"1254C367>7373"`
 }
 
-// SegmentInfo contains general information about a segment, like an UID, a title etc.
-// This information is not really required for playback.
-type SegmentInfo struct {
-	UID           []byte              `ebml:"73A4,omitempty"`
-	Filename      string              `ebml:"7384,omitempty"`
-	PrevUID       []byte              `ebml:"3CB923,omitempty"`
-	PrevFilename  string              `ebml:"3C83AB,omitempty"`
-	NextUID       []byte              `ebml:"3EB923,omitempty"`
-	NextFilename  string              `ebml:"3E83BB,omitempty"`
-	TimecodeScale int64               `ebml:"2AD7B1"`
-	Duration      float64             `ebml:"4489,omitempty"`
-	DateUTC       *time.Time          `ebml:"4461,omitempty"`
-	Title         string              `ebml:"7BA9,omitempty"`
-	MuxingApp     string              `ebml:"4D80"`
-	WritingApp    string              `ebml:"5741"`
-	SegmentFamily []byte              `ebml:"4444"`
-	Translate     []*ChapterTranslate `ebml:"6924"`
+// SeekHead contains the position of other Top-Level Elements.
+type SeekHead struct {
+	Seeks []*Seek `ebml:"4DBB"`
 }
 
-// NewSegmentInfo creates SegmentInfo element with default values.
-func NewSegmentInfo() *SegmentInfo {
-	return &SegmentInfo{TimecodeScale: 1000000}
+// Seek contains a single seek entry to an EBML Element.
+type Seek struct {
+	ID       ID       `ebml:"53AB"`
+	Position Position `ebml:"53AC"`
+}
+
+// Info contains miscellaneous general information and statistics on the file.
+type Info struct {
+	ID               SegmentID           `ebml:"73A4,omitempty" json:",omitempty"`
+	Filename         string              `ebml:"7384,omitempty" json:",omitempty"`
+	PrevID           SegmentID           `ebml:"3CB923,omitempty" json:",omitempty"`
+	PrevFilename     string              `ebml:"3C83AB,omitempty" json:",omitempty"`
+	NextID           SegmentID           `ebml:"3EB923,omitempty" json:",omitempty"`
+	NextFilename     string              `ebml:"3E83BB,omitempty" json:",omitempty"`
+	SegmentFamily    SegmentID           `ebml:"4444,omitempty" json:",omitempty"`
+	ChapterTranslate []*ChapterTranslate `ebml:"6924,omitempty" json:",omitempty"`
+	TimecodeScale    time.Duration       `ebml:"2AD7B1,1000000"`
+	Duration         float64             `ebml:"4489,omitempty" json:",omitempty"`
+	Date             time.Time           `ebml:"4461,omitempty" json:",omitempty"`
+	Title            string              `ebml:"7BA9,omitempty" json:",omitempty"`
+	MuxingApp        string              `ebml:"4D80"`
+	WritingApp       string              `ebml:"5741"`
 }
 
 // ChapterTranslate contains tuple of corresponding ID used by chapter codecs to represent a Segment.
 type ChapterTranslate struct {
-	EditionUID int64  `ebml:"69FC,omitempty"`
-	Codec      int64  `ebml:"69BF"`
-	ID         []byte `ebml:"69A5"`
+	EditionIDs []EditionID  `ebml:"69FC,omitempty" json:",omitempty"`
+	Codec      ChapterCodec `ebml:"69BF"`
+	ID         TranslateID  `ebml:"69A5"`
 }
 
-// A SeekHead is an index of elements that are children of Segment.
-// It can point to other SeekHeads, but not to itself.
-// If all non-Cluster precede all Clusters, a SeekHead is not really necessary.
-// Otherwise, a missing SeekHead leads to long file loading times or the inability
-// to access certain data.
-type SeekHead struct {
-	Seek []*Seek `ebml:"4DBB"`
-}
+type TranslateID []byte
+type ChapterCodec uint8
 
-// A Seek element contains an ID and the position within the Segment at which
-// an element with this ID can be found.
-type Seek struct {
-	ID       []byte `ebml:"53AB"`
-	Position int64  `ebml:"53AC"`
-}
-
-// A Track element describes one track of the Segment.
-// A file containing only chapters and attachments does not have a Track element,
-// thus it’s not mandatory.
-type Track struct {
-	TrackNumber                 int                `ebml:"D7"`
-	TrackUID                    int64              `ebml:"73C5"`
-	TrackType                   int                `ebml:"83"`
-	FlagEnabled                 int                `ebml:"B9"`
-	FlagDefault                 int                `ebml:"88"`
-	FlagForced                  int                `ebml:"55AA"`
-	FlagLacing                  int                `ebml:"9C"`
-	MinCache                    int                `ebml:"6DE7"`
-	MaxCache                    int                `ebml:"6DF8,omitempty"`
-	DefaultDuration             int64              `ebml:"23E383,omitempty"`
-	DefaultDecodedFieldDuration int64              `ebml:"234E7A,omitempty"`
-	MaxBlockAdditionID          int64              `ebml:"55EE"`
-	Name                        string             `ebml:"536E,omitempty"`
-	Language                    string             `ebml:"22B59C,omitempty"`
-	CodecID                     string             `ebml:"86"`
-	CodecPrivate                []byte             `ebml:"63A2,omitempty"`
-	CodecName                   string             `ebml:"258688,omitempty"`
-	AttachmentLink              int64              `ebml:"7446,omitempty"`
-	CodecDecodeAll              int64              `ebml:"AA"`
-	TrackOverlay                int64              `ebml:"6FAB,omitempty"`
-	CodecDelay                  int64              `ebml:"56AA,omitempty"`
-	SeekPreRoll                 int64              `ebml:"56BB"`
-	Translate                   []*TrackTranslate  `ebml:"6624,omitempty"`
-	Video                       *VideoTrack        `ebml:"E0,omitempty"`
-	Audio                       *AudioTrack        `ebml:"E1,omitempty"`
-	TrackOperation              *TrackOperation    `ebml:"E2,omitempty"`
-	ContentEncodings            []*ContentEncoding `ebml:"6D80>6240"`
-}
-
-// TrackTranslate describes a track identification for the given Chapter Codec.
-type TrackTranslate struct {
-	EditionUID int64  `ebml:"66FC,omitempty"`
-	Codec      int64  `ebml:"66BF"`
-	ID         []byte `ebml:"66A5"`
-}
-
-// Track types
 const (
-	TrackTypeVideo    = 0x01
-	TrackTypeAudio    = 0x02
-	TrackTypeComplex  = 0x03
-	TrackTypeLogo     = 0x10
-	TrackTypeSubtitle = 0x11
-	TrackTypeButton   = 0x12
-	TrackTypeControl  = 0x20
+	ChapterCodecMatroska ChapterCodec = iota
+	ChapterCodecDVD
 )
 
-// A Cluster contains video, audio and subtitle data.
-// Note that a Matroska file could contain chapter data or attachments,
-// but no multimedia data, so Cluster is not a mandatory element.
+// Cluster is a Top-Level Element containing the Block structure.
 type Cluster struct {
-	Timecode     int64          `ebml:"E7"`
-	SilentTracks []int          `ebml:"5854>58D7,omitempty"`
-	Position     int64          `ebml:"A7,omitempty"`
-	PrevSize     int64          `ebml:"AB,omitempty"`
-	SimpleBlock  []*SimpleBlock `ebml:"A3,omitempty"`
-	BlockGroup   []*BlockGroup  `ebml:"A0,omitempty"`
+	Timecode     Time          `ebml:"E7"`
+	SilentTracks []TrackNumber `ebml:"5854>58D7,omitempty" json:",omitempty"`
+	Position     Position      `ebml:"A7,omitempty" json:",omitempty"`
+	PrevSize     int64         `ebml:"AB,omitempty" json:",omitempty"`
+	SimpleBlock  []*Block      `ebml:"A3,omitempty" json:",omitempty"`
+	BlockGroup   []*BlockGroup `ebml:"A0,omitempty" json:",omitempty"`
 }
 
-// SimpleBlock is similar to Block but without all the extra information,
-// mostly used to reduced overhead when no extra feature is needed.
-type SimpleBlock struct {
-	Data []byte
-}
+type ClusterID uint64
 
-// UnmarshalEBML reads and decodes SimpleBlock data from dec.
-func (r *SimpleBlock) UnmarshalEBML(dec *ebml.Decoder) (err error) {
-	// TODO: decode according to https://www.matroska.org/technical/specs/index.html#simpleblock_structure
-	r.Data, err = dec.ReadBytes()
-	return
-}
-
-func (r *SimpleBlock) String() string {
-	return "SimpleBlock{" + strconv.Itoa(len(r.Data)) + " bytes}"
-}
-
-// Block contains the actual data to be rendered and a timestamp
-// relative to the Cluster Timecode.
+// Block contains the actual data to be rendered and a timestamp.
 type Block struct {
-	Data []byte
+	TrackNumber TrackNumber
+	Timecode    int16
+	Flags       uint8
+	Frames      int
+	//Data []byte
 }
 
-// UnmarshalEBML reads and decodes Block data from dec.
-func (r *Block) UnmarshalEBML(dec *ebml.Decoder) (err error) {
-	// TODO: decode according to https://www.matroska.org/technical/specs/index.html#block_structure
-	r.Data, err = dec.ReadBytes()
-	return
-}
+const (
+	LacingNone uint8 = iota
+	LacingXiph
+	LacingFixedSize
+	LacingEBML
+)
 
-func (r *Block) String() string {
-	return "Block{" + strconv.Itoa(len(r.Data)) + " bytes}"
+func (b *Block) UnmarshalEBML(r *ebml.Reader) error {
+	//log.Printf("\t Block %#v", r.Len())
+	v, err := r.ReadVInt()
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	b.TrackNumber = TrackNumber(v)
+	p, err := r.Next(3)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	b.Timecode = int16(p[0])<<8 | int16(p[1])
+	b.Flags = p[2]
+	if (b.Flags>>1)&3 == 0 {
+		return nil
+	}
+	log.Printf("\t Block %#v", b)
+	p, err = r.Next(1)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	b.Frames = int(p[0])
+	log.Printf("\t Block %#v", b)
+	return nil
 }
 
 // BlockGroup contains a single Block and a relative information.
 type BlockGroup struct {
-	Block             *Block           `ebml:"A1"`
-	Additions         []*BlockAddition `ebml:"75A1>A6,omitempty"`
-	Duration          int64            `ebml:"9B,omitempty"`
+	Block             *Block           `ebml:"A1" json:",omitempty"`
+	Additions         []*BlockAddition `ebml:"75A1>A6,omitempty" json:",omitempty"`
+	Duration          Duration         `ebml:"9B,omitempty" json:",omitempty"`
 	ReferencePriority int64            `ebml:"FA"`
-	ReferenceBlock    int64            `ebml:"FB,omitempty"`
-	CodecState        []byte           `ebml:"A4,omitempty"`
-	DiscardPadding    int64            `ebml:"75A2,omitempty"`
-	Slices            []int64          `ebml:"8E>E8>CC,omitempty"`
+	ReferenceBlock    []Time           `ebml:"FB,omitempty" json:",omitempty"`
+	CodecState        []byte           `ebml:"A4,omitempty" json:",omitempty"`
+	DiscardPadding    time.Duration    `ebml:"75A2,omitempty" json:",omitempty"`
+	Slices            []*TimeSlice     `ebml:"8E>E8,omitempty" json:",omitempty"`
 }
 
-// BlockAddition contains additional blocks to complete the main one.
-type BlockAddition struct {
-	ID         int64  `ebml:"EE"`
-	Additional []byte `ebml:"A5"`
+type TimeSlice struct {
+	LaceNumber int64 `ebml:"CC"`
 }
+
+// BlockAdd contains additional blocks to complete the main one.
+type BlockAddition struct {
+	ID   BlockAdditionID `ebml:"EE,1"`
+	Data []byte          `ebml:"A5"`
+}
+
+type BlockAdditionID uint64
+
+// Track is a Top-Level Element of information with track description.
+type Track struct {
+	Entries []*TrackEntry `ebml:"AE"`
+}
+
+// TrackEntry describes a track with all Elements.
+type TrackEntry struct {
+	Number                      TrackNumber        `ebml:"D7"`
+	ID                          TrackID            `ebml:"73C5"`
+	Type                        TrackType          `ebml:"83"`
+	Enabled                     bool               `ebml:"B9,true"`
+	Default                     bool               `ebml:"88,true"`
+	Forced                      bool               `ebml:"55AA"`
+	Lacing                      bool               `ebml:"9C,true"`
+	MinCache                    int                `ebml:"6DE7"`
+	MaxCache                    int                `ebml:"6DF8,omitempty" json:",omitempty"`
+	DefaultDuration             time.Duration      `ebml:"23E383,omitempty" json:",omitempty"`
+	DefaultDecodedFieldDuration time.Duration      `ebml:"234E7A,omitempty" json:",omitempty"`
+	MaxBlockAdditionID          BlockAdditionID    `ebml:"55EE"`
+	Name                        string             `ebml:"536E,omitempty" json:",omitempty"`
+	Language                    string             `ebml:"22B59C,eng,omitempty" json:",omitempty"`
+	CodecID                     string             `ebml:"86"`
+	CodecPrivate                []byte             `ebml:"63A2,omitempty" json:",omitempty"`
+	CodecName                   string             `ebml:"258688,omitempty" json:",omitempty"`
+	AttachmentLink              AttachmentID       `ebml:"7446,omitempty" json:",omitempty"`
+	CodecDecodeAll              bool               `ebml:"AA,true"`
+	TrackOverlay                []TrackNumber      `ebml:"6FAB,omitempty" json:",omitempty"`
+	CodecDelay                  time.Duration      `ebml:"56AA,omitempty" json:",omitempty"`
+	SeekPreRoll                 time.Duration      `ebml:"56BB"`
+	TrackTranslate              []*TrackTranslate  `ebml:"6624,omitempty" json:",omitempty"`
+	Video                       *VideoTrack        `ebml:"E0,omitempty" json:",omitempty"`
+	Audio                       *AudioTrack        `ebml:"E1,omitempty" json:",omitempty"`
+	TrackOperation              *TrackOperation    `ebml:"E2,omitempty" json:",omitempty"`
+	ContentEncodings            []*ContentEncoding `ebml:"6D80>6240,omitempty" json:",omitempty"`
+}
+
+type TrackID uint64
+type TrackNumber int
+type AttachmentID uint8
+type TrackType uint8
+
+const (
+	TrackTypeVideo    TrackType = 0x01
+	TrackTypeAudio    TrackType = 0x02
+	TrackTypeComplex  TrackType = 0x03
+	TrackTypeLogo     TrackType = 0x10
+	TrackTypeSubtitle TrackType = 0x11
+	TrackTypeButton   TrackType = 0x12
+	TrackTypeControl  TrackType = 0x20
+)
+
+// TrackTranslate describes a track identification for the given Chapter Codec.
+type TrackTranslate struct {
+	EditionIDs       []EditionID  `ebml:"66FC,omitempty" json:",omitempty"`
+	Codec            ChapterCodec `ebml:"66BF"`
+	TranslateTrackID `ebml:"66A5"`
+}
+
+type TranslateTrackID []byte
 
 // VideoTrack contains information that is specific for video tracks.
 type VideoTrack struct {
-	FlagInterlaced  int       `ebml:"9A"`
-	FieldOrder      int       `ebml:"9D"`
-	StereoMode      int       `ebml:"53B8,omitempty"`
-	AlphaMode       int       `ebml:"53C0,omitempty"`
-	PixelWidth      int       `ebml:"B0"`
-	PixelHeight     int       `ebml:"BA"`
-	PixelCropBottom int       `ebml:"54AA,omitempty"`
-	PixelCropTop    int       `ebml:"54BB,omitempty"`
-	PixelCropLeft   int       `ebml:"54CC,omitempty"`
-	PixelCropRight  int       `ebml:"54DD,omitempty"`
-	DisplayWidth    int       `ebml:"54B0,omitempty"`
-	DisplayHeight   int       `ebml:"54BA,omitempty"`
-	DisplayUnit     int       `ebml:"54B2,omitempty"`
-	AspectRatioType int       `ebml:"54B3,omitempty"`
-	ColourSpace     []byte    `ebml:"2EB524,omitempty"`
-	Colour          []*Colour `ebml:"55B0,omitempty"`
+	Interlaced      InterlaceType   `ebml:"9A"`
+	FieldOrder      FieldOrder      `ebml:"9D,2"`
+	StereoMode      StereoMode      `ebml:"53B8,omitempty" json:"stereoMode,omitempty"`
+	AlphaMode       *AlphaMode      `ebml:"53C0,omitempty" json:"alphaMode,omitempty"`
+	Width           int             `ebml:"B0"`
+	Height          int             `ebml:"BA"`
+	CropBottom      int             `ebml:"54AA,omitempty" json:",omitempty"`
+	CropTop         int             `ebml:"54BB,omitempty" json:",omitempty"`
+	CropLeft        int             `ebml:"54CC,omitempty" json:",omitempty"`
+	CropRight       int             `ebml:"54DD,omitempty" json:",omitempty"`
+	DisplayWidth    int             `ebml:"54B0,omitempty" json:",omitempty"`
+	DisplayHeight   int             `ebml:"54BA,omitempty" json:",omitempty"`
+	DisplayUnit     DisplayUnit     `ebml:"54B2,omitempty" json:",omitempty"`
+	AspectRatioType AspectRatioType `ebml:"54B3,omitempty" json:",omitempty"`
+	ColourSpace     uint32          `ebml:"2EB524,omitempty" json:",omitempty"`
+	Colour          *Colour         `ebml:"55B0,omitempty" json:",omitempty"`
 }
+
+type InterlaceType uint8
+
+// InterlaceTypes
+const (
+	InterlaceTypeInterlaced  InterlaceType = 1
+	InterlaceTypeProgressive InterlaceType = 2
+)
+
+type FieldOrder uint8
+
+// FieldOrders
+const (
+	FieldOrderProgressive           FieldOrder = 0
+	FieldOrderTop                   FieldOrder = 1
+	FieldOrderUndetermined          FieldOrder = 2
+	FieldOrderBottom                FieldOrder = 6
+	FieldOrderDisplayBottomStoreTop FieldOrder = 9
+	FieldOrderDisplayTopStoreBottom FieldOrder = 14
+)
+
+type StereoMode uint8
+
+// StereoModes
+const (
+	StereoModeMono StereoMode = iota
+	StereoModeHorizontalLeft
+	StereoModeVerticalRight
+	StereoModeVerticalLeft
+	StereoModeCheckboardRight
+	StereoModeCheckboardLeft
+	StereoModeInterleavedRight
+	StereoModeInterleavedLeft
+	StereoModeColumnInterleavedRight
+	StereoModeAnaglyphCyanRed
+	StereoModeHorizontalRight
+	StereoModeAnaglyphGreenMagenta
+	StereoModeLacedLeft
+	StereoModeLacedRight
+)
+
+type AlphaMode struct {
+}
+
+type DisplayUnit uint8
+
+// DisplayUnits
+const (
+	DisplayUnitPixels DisplayUnit = iota
+	DisplayUnitCentimeters
+	DisplayUnitInches
+	DisplayUnitAspectRatio
+)
+
+type AspectRatioType uint8
+
+// AspectRatioTypes
+const (
+	AspectRatioFreeResizing AspectRatioType = iota
+	AspectRatioKeep
+	AspectRatioFixed
+)
 
 // Colour describes the colour format settings.
 type Colour struct {
-	MatrixCoefficients      int                  `ebml:"55B1,omitempty"`
-	BitsPerChannel          int                  `ebml:"55B2,omitempty"`
-	ChromaSubsamplingHorz   int                  `ebml:"55B3,omitempty"`
-	ChromaSubsamplingVert   int                  `ebml:"55B4,omitempty"`
-	CbSubsamplingHorz       int                  `ebml:"55B5,omitempty"`
-	CbSubsamplingVert       int                  `ebml:"55B6,omitempty"`
-	ChromaSitingHorz        int                  `ebml:"55B7,omitempty"`
-	ChromaSitingVert        int                  `ebml:"55B8,omitempty"`
-	Range                   int                  `ebml:"55B9,omitempty"`
-	TransferCharacteristics int                  `ebml:"55BA,omitempty"`
-	Primaries               int                  `ebml:"55BB,omitempty"`
-	MaxCLL                  int                  `ebml:"55BC,omitempty"`
-	MaxFALL                 int                  `ebml:"55BD,omitempty"`
-	MasteringMetadata       []*MasteringMetadata `ebml:"55D0"`
+	MatrixCoefficients      MatrixCoefficients      `ebml:"55B1,2,omitempty" json:",omitempty"`
+	BitsPerChannel          int                     `ebml:"55B2,omitempty" json:",omitempty"`
+	ChromaSubsamplingHorz   int                     `ebml:"55B3,omitempty" json:",omitempty"`
+	ChromaSubsamplingVert   int                     `ebml:"55B4,omitempty" json:",omitempty"`
+	CbSubsamplingHorz       int                     `ebml:"55B5,omitempty" json:",omitempty"`
+	CbSubsamplingVert       int                     `ebml:"55B6,omitempty" json:",omitempty"`
+	ChromaSitingHorz        ChromaSiting            `ebml:"55B7,omitempty" json:",omitempty"`
+	ChromaSitingVert        ChromaSiting            `ebml:"55B8,omitempty" json:",omitempty"`
+	ColourRange             ColourRange             `ebml:"55B9,omitempty" json:",omitempty"`
+	TransferCharacteristics TransferCharacteristics `ebml:"55BA,omitempty" json:",omitempty"`
+	Primaries               Primaries               `ebml:"55BB,2,omitempty" json:",omitempty"`
+	MaxCLL                  int64                   `ebml:"55BC,omitempty" json:",omitempty"`
+	MaxFALL                 int64                   `ebml:"55BD,omitempty" json:",omitempty"`
+	MasteringMetadata       *MasteringMetadata      `ebml:"55D0"`
 }
+
+// MatrixCoefficients, see Table 4 of ISO/IEC 23001-8:2013/DCOR1
+type MatrixCoefficients uint8
+
+// TransferCharacteristics, see Table 3 of ISO/IEC 23001-8:2013/DCOR1
+type TransferCharacteristics uint8
+
+// Primaries, see Table 2 of ISO/IEC 23001-8:2013/DCOR1
+type Primaries uint8
+
+type ChromaSiting uint8
+
+// ChromaSitings
+const (
+	ChromaSitingUnspecified ChromaSiting = iota
+	ChromaSitingCollocated
+	ChromaSitingHalf
+)
+
+type ColourRange uint8
+
+// ColourRange
+const (
+	ColourRangeUnspecified ColourRange = iota
+	ColourRangeBroadcast
+	ColourRangeFull
+	ColourRangeDefined
+)
 
 // MasteringMetadata represents SMPTE 2086 mastering data.
 type MasteringMetadata struct {
-	PrimaryRChromaX   float64 `ebml:"55D1,omitempty"`
-	PrimaryRChromaY   float64 `ebml:"55D2,omitempty"`
-	PrimaryGChromaX   float64 `ebml:"55D3,omitempty"`
-	PrimaryGChromaY   float64 `ebml:"55D4,omitempty"`
-	PrimaryBChromaX   float64 `ebml:"55D5,omitempty"`
-	PrimaryBChromaY   float64 `ebml:"55D6,omitempty"`
-	WhitePointChromaX float64 `ebml:"55D7,omitempty"`
-	WhitePointChromaY float64 `ebml:"55D8,omitempty"`
-	LuminanceMax      float64 `ebml:"55D9,omitempty"`
-	LuminanceMin      float64 `ebml:"55DA,omitempty"`
+	PrimaryRChromaX   float64 `ebml:"55D1,omitempty" json:",omitempty"`
+	PrimaryRChromaY   float64 `ebml:"55D2,omitempty" json:",omitempty"`
+	PrimaryGChromaX   float64 `ebml:"55D3,omitempty" json:",omitempty"`
+	PrimaryGChromaY   float64 `ebml:"55D4,omitempty" json:",omitempty"`
+	PrimaryBChromaX   float64 `ebml:"55D5,omitempty" json:",omitempty"`
+	PrimaryBChromaY   float64 `ebml:"55D6,omitempty" json:",omitempty"`
+	WhitePointChromaX float64 `ebml:"55D7,omitempty" json:",omitempty"`
+	WhitePointChromaY float64 `ebml:"55D8,omitempty" json:",omitempty"`
+	LuminanceMax      float64 `ebml:"55D9,omitempty" json:",omitempty"`
+	LuminanceMin      float64 `ebml:"55DA,omitempty" json:",omitempty"`
 }
 
 // AudioTrack contains information that is specific for audio tracks.
 type AudioTrack struct {
-	SamplingFreq       float64 `ebml:"B5"`
-	OutputSamplingFreq float64 `ebml:"78B5,omitempty"`
-	Channels           int     `ebml:"9F"`
-	BitDepth           int     `ebml:"6264,omitempty"`
+	SamplingFreq       float64 `ebml:"B5,8000"`
+	OutputSamplingFreq float64 `ebml:"78B5,omitempty" json:",omitempty"`
+	Channels           int     `ebml:"9F,1"`
+	BitDepth           int     `ebml:"6264,omitempty" json:",omitempty"`
 }
 
 // TrackOperation describes an operation that needs to be applied on tracks
-// to create this virtual track.
+// to create the virtual track.
 type TrackOperation struct {
-	CombinePlanes []*TrackPlane `ebml:"E3>E4,omitempty"`
-	JoinBlocks    []int64       `ebml:"E9>ED"`
+	CombinePlanes []*TrackPlane `ebml:"E3>E4,omitempty" json:",omitempty"`
+	JoinBlocks    []TrackID     `ebml:"E9>ED,omitempty" json:",omitempty"`
 }
 
 // TrackPlane contains a video plane track that need to be combined to create this track.
 type TrackPlane struct {
-	UID  int64 `ebml:"E5"`
-	Type int   `ebml:"E6"`
+	ID   TrackID   `ebml:"E5"`
+	Type PlaneType `ebml:"E6"`
 }
+
+type PlaneType uint8
+
+// PlaneTypes
+const (
+	PlaneTypeLeft PlaneType = iota
+	PlaneTypeRight
+	PlaneTypeBackground
+)
 
 // ContentEncoding contains settings for several content encoding mechanisms
 // like compression or encryption.
 type ContentEncoding struct {
-	Order       int          `ebml:"5031"`
-	Scope       int          `ebml:"5032"`
-	Type        int          `ebml:"5033"`
-	Compression *Compression `ebml:"5034,omitempty"`
-	Encryption  *Encryption  `ebml:"5035,omitempty"`
+	Order       int           `ebml:"5031"`
+	Scope       EncodingScope `ebml:"5032,1"`
+	Type        EncodingType  `ebml:"5033"`
+	Compression *Compression  `ebml:"5034,omitempty" json:",omitempty"`
+	Encryption  *Encryption   `ebml:"5035,omitempty" json:",omitempty"`
 }
+
+type EncodingScope uint8
+
+// EncodingScopes
+const (
+	EncodingScopeAll     EncodingScope = 1
+	EncodingScopePrivate EncodingScope = 2
+	EncodingScopeNext    EncodingScope = 4
+)
+
+type EncodingType uint8
+
+const (
+	EncodingTypeCompression EncodingType = iota
+	EncodingTypeEncryption
+)
 
 // Compression describes the compression used.
 type Compression struct {
-	Algo     int    `ebml:"4254"`
-	Settings []byte `ebml:"4255,omitempty"`
+	Algo     CompressionAlgo `ebml:"4254"`
+	Settings []byte          `ebml:"4255,omitempty" json:",omitempty"`
 }
+
+type CompressionAlgo uint8
+
+const (
+	CompressionAlgoZlib            CompressionAlgo = 0
+	CompressionAlgoHeaderStripping CompressionAlgo = 3
+)
 
 // Encryption describes the encryption used.
 type Encryption struct {
-	EncAlgo     int    `ebml:"47E1,omitempty"`
-	EncKeyID    []byte `ebml:"47E2,omitempty"`
-	Signature   []byte `ebml:"47E3,omitempty"`
-	SigKeyID    []byte `ebml:"47E4,omitempty"`
-	SigAlgo     int    `ebml:"47E5,omitempty"`
-	SigHashAlgo int    `ebml:"47E6,omitempty"`
+	Algo         uint8  `ebml:"47E1,omitempty" json:",omitempty"`
+	KeyID        []byte `ebml:"47E2,omitempty" json:",omitempty"`
+	Signature    []byte `ebml:"47E3,omitempty" json:",omitempty"`
+	SignKeyID    []byte `ebml:"47E4,omitempty" json:",omitempty"`
+	SignAlgo     uint8  `ebml:"47E5,omitempty" json:",omitempty"`
+	SignHashAlgo uint8  `ebml:"47E6,omitempty" json:",omitempty"`
 }
 
 // CuePoint contains all information relative to a seek point in the Segment.
 type CuePoint struct {
-	Time           int64               `ebml:"B3"`
+	Time           Time                `ebml:"B3"`
 	TrackPositions []*CueTrackPosition `ebml:"B7"`
 }
 
 // CueTrackPosition contains positions for different tracks corresponding to the timestamp.
 type CueTrackPosition struct {
-	Track            int64   `ebml:"F7"`
-	ClusterPosition  int64   `ebml:"F1"`
-	RelativePosition int64   `ebml:"F0,omitempty"`
-	Duration         int64   `ebml:"B2,omitempty"`
-	BlockNumber      int64   `ebml:"5378,omitempty"`
-	CodecState       int64   `ebml:"EA,omitempty"`
-	References       []int64 `ebml:"DB>96,omitempty"`
+	Track            TrackNumber `ebml:"F7"`
+	ClusterPosition  Position    `ebml:"F1"`
+	RelativePosition Position    `ebml:"F0,omitempty" json:",omitempty"`
+	Duration         Duration    `ebml:"B2,omitempty" json:",omitempty"`
+	BlockNumber      int         `ebml:"5378,1,omitempty" json:",omitempty"`
+	CodecState       Position    `ebml:"EA,omitempty" json:",omitempty"`
+	References       []Time      `ebml:"DB>96,omitempty" json:",omitempty"`
 }
 
 // Attachment describes attached files.
 type Attachment struct {
-	UID         int64  `ebml:"46AE"`
-	Description string `ebml:"467E,omitempty"`
-	Name        string `ebml:"466E"`
-	MimeType    string `ebml:"4660"`
-	Data        []byte `ebml:"465C"`
+	ID          AttachmentID `ebml:"46AE"`
+	Description string       `ebml:"467E,omitempty" json:",omitempty"`
+	Name        string       `ebml:"466E"`
+	MimeType    string       `ebml:"4660"`
+	Data        []byte       `ebml:"465C"`
 }
 
-// Chapter contains all information about a Segment edition.
-type Chapter struct {
-	EditionUID  int64          `ebml:"45BC,omitempty"`
-	FlagHidden  int            `ebml:"45BD"`
-	FlagDefault int            `ebml:"45DB"`
-	FlagOrdered int            `ebml:"45DD,omitempty"`
-	Atoms       []*ChapterAtom `ebml:"B6"`
+// Edition contains all information about a Segment edition.
+type Edition struct {
+	ID      EditionID      `ebml:"45BC,omitempty" json:",omitempty"`
+	Hidden  bool           `ebml:"45BD"`
+	Default bool           `ebml:"45DB"`
+	Ordered bool           `ebml:"45DD,omitempty" json:",omitempty"`
+	Atoms   []*ChapterAtom `ebml:"B6"`
 }
 
-// ChapterAtom contains the atom information to use as the chapter atom (apply to all tracks).
+// ChapterAtom contains the atom information to use as the chapter atom.
 type ChapterAtom struct {
-	ChapterUID        int64             `ebml:"73C4"`
-	StringUID         string            `ebml:"5654,omitempty"`
-	TimeStart         int64             `ebml:"91"`
-	TimeEnd           int64             `ebml:"92,omitempty"`
-	FlagHidden        int               `ebml:"98"`
-	FlagEnabled       int               `ebml:"4598"`
-	SegmentUID        int64             `ebml:"6E67,omitempty"`
-	SegmentEditionUID int64             `ebml:"6EBC,omitempty"`
-	PhysicalEquiv     int               `ebml:"63C3,omitempty"`
-	Tracks            []int64           `ebml:"8F>89,omitempty"`
-	Displays          []*ChapterDisplay `ebml:"80,omitempty"`
-	Processes         []*ChapterProcess `ebml:"6944,omitempty"`
+	ID            ChapterID         `ebml:"73C4"`
+	StringID      string            `ebml:"5654,omitempty" json:",omitempty"`
+	TimeStart     Time              `ebml:"91"`
+	TimeEnd       Time              `ebml:"92,omitempty" json:",omitempty"`
+	Hidden        bool              `ebml:"98"`
+	Enabled       bool              `ebml:"4598,true"`
+	SegmentID     SegmentID         `ebml:"6E67,omitempty" json:",omitempty"`
+	EditionID     EditionID         `ebml:"6EBC,omitempty" json:",omitempty"`
+	PhysicalEquiv int               `ebml:"63C3,omitempty" json:",omitempty"`
+	Tracks        []TrackID         `ebml:"8F>89,omitempty" json:",omitempty"`
+	Displays      []*ChapterDisplay `ebml:"80,omitempty" json:",omitempty"`
+	Processes     []*ChapterProcess `ebml:"6944,omitempty" json:",omitempty"`
 }
+
+type ChapterID uint64
 
 // ChapterDisplay contains all possible strings to use for the chapter display.
 type ChapterDisplay struct {
 	String   string `ebml:"85"`
-	Language string `ebml:"437C"`
-	Country  string `ebml:"437E,omitempty"`
+	Language string `ebml:"437C,eng"`                         // See ISO-639-2
+	Country  string `ebml:"437E,omitempty" json:",omitempty"` // See IANA ccTLDs
 }
 
 // ChapterProcess describes the atom processing commands.
 type ChapterProcess struct {
-	CodecID int               `ebml:"6955"`
-	Private []byte            `ebml:"450D,omitempty"`
-	Command []*ChapterCommand `ebml:"6911,omitempty"`
+	CodecID ChapterCodec      `ebml:"6955"`
+	Private []byte            `ebml:"450D,omitempty" json:",omitempty"`
+	Command []*ChapterCommand `ebml:"6911,omitempty" json:",omitempty"`
 }
 
 // ChapterCommand contains all the commands associated to the atom.
 type ChapterCommand struct {
-	Time int64  `ebml:"6922"`
+	Time Time   `ebml:"6922"`
 	Data []byte `ebml:"6933"`
 }
 
-// Tag contains meta data for tracks and/or chapters.
+// Tag contains Elements specific to Tracks/Chapters.
 type Tag struct {
-	Targets []*TagTarget `ebml:"63C0"`
-	Tags    []*SimpleTag `ebml:"67C8"`
+	Targets    []*Target    `ebml:"63C0"`
+	SimpleTags []*SimpleTag `ebml:"67C8"`
 }
 
-// TagTarget contains all UIDs where the specified meta data apply.
-type TagTarget struct {
-	TypeValue     int     `ebml:"68CA,omitempty"`
-	Type          string  `ebml:"63CA,omitempty"`
-	TrackUID      []int64 `ebml:"63C5,omitempty"`
-	EditionUID    []int64 `ebml:"63C9,omitempty"`
-	ChapterUID    []int64 `ebml:"63C4,omitempty"`
-	AttachmentUID []int64 `ebml:"63C6,omitempty"`
+// Target contains all IDs where the specified meta data apply.
+type Target struct {
+	TypeValue     int            `ebml:"68CA,50,omitempty" json:",omitempty"`
+	Type          string         `ebml:"63CA,omitempty" json:",omitempty"`
+	TrackIDs      []TrackID      `ebml:"63C5,omitempty" json:",omitempty"`
+	EditionIDs    []EditionID    `ebml:"63C9,omitempty" json:",omitempty"`
+	ChapterIDs    []ChapterID    `ebml:"63C4,omitempty" json:",omitempty"`
+	AttachmentIDs []AttachmentID `ebml:"63C6,omitempty" json:",omitempty"`
 }
 
 // SimpleTag contains general information about the target.
 type SimpleTag struct {
-	Tags     []*SimpleTag `ebml:"67C8"`
-	Name     string       `ebml:"45A3"`
-	Language string       `ebml:"447A"`
-	Default  int          `ebml:"4484"`
-	String   string       `ebml:"4487,omitempty"`
-	Binary   []byte       `ebml:"4485,omitempty"`
+	Name     string `ebml:"45A3"`
+	Language string `ebml:"447A,und"`
+	Default  bool   `ebml:"4484,true"`
+	String   string `ebml:"4487,omitempty" json:",omitempty"`
+	Binary   []byte `ebml:"4485,omitempty" json:",omitempty"`
+}
+
+func NewSimpleTag(name, text string) *SimpleTag {
+	return &SimpleTag{
+		Name:     name,
+		String:   text,
+		Language: "und",
+		Default:  true,
+	}
 }

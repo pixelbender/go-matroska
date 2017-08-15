@@ -1,7 +1,11 @@
 .DS_Store
 
+.idea/
 bin/
 pkg/
 
 *.coverprofile
 *.coverage
+
+matroska/testdata/
+matroska/testdata.zip
