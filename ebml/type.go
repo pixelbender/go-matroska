@@ -248,13 +248,13 @@ func newField(t reflect.StructField, index int, tag string) (*field, error) {
 func newDefault(t reflect.Type, v string) (interface{}, error) {
 	switch t.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return strconv.ParseInt(v, 10, int(t.Size()))
+		return strconv.ParseInt(v, 10, int(t.Size())*8)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return strconv.ParseUint(v, 10, int(t.Size()))
+		return strconv.ParseUint(v, 10, int(t.Size())*8)
 	case reflect.Bool:
 		return strings.ToLower(v) != "false", nil
 	case reflect.Float32, reflect.Float64:
-		return strconv.ParseFloat(v, int(t.Size()))
+		return strconv.ParseFloat(v, int(t.Size())*8)
 	case reflect.String:
 		return v, nil
 	default:
