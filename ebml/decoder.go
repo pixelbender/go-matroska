@@ -115,7 +115,7 @@ func (r *Reader) Len() int64 {
 	return r.len
 }
 
-// ReadFloat reads and returns a EBML int value.
+// ReadInt reads and returns a EBML int value.
 func (r *Reader) ReadInt() (int64, error) {
 	if r.len < 0 || r.len > 8 {
 		return 0, errFormat("int")
@@ -131,7 +131,7 @@ func (r *Reader) ReadInt() (int64, error) {
 	return v, nil
 }
 
-// ReadFloat reads and returns a EBML boolean value.
+// ReadBool reads and returns a EBML boolean value.
 func (r *Reader) ReadBool() (bool, error) {
 	v, err := r.ReadInt()
 	return v != 0, err
