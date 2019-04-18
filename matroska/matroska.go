@@ -12,6 +12,8 @@ func Decode(file string) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer r.Close()
+
 	dec := ebml.NewReader(r, &ebml.DecodeOptions{
 		SkipDamaged: true,
 	})
