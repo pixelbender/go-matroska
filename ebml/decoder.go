@@ -10,21 +10,24 @@ import (
 )
 
 const (
-	bufferSize    = 64000
-	maxBufferSize = 64000
+	defaultBufferSize = 64000
 )
 
 type DecodeOptions struct {
 	SkipDamaged   bool
 	DecodeUnknown func(id uint32, elem *Reader) error
+	BufferSize    int64
 }
 
 func NewReader(r io.Reader, opt *DecodeOptions) *Reader {
 	seek, _ := r.(io.ReadSeeker)
+	if opt.BufferSize == 0 {
+		opt.BufferSize = defaultBufferSize
+	}
 	return &Reader{
 		dec: &decoderState{
 			opt:  opt,
-			buf:  make([]byte, bufferSize),
+			buf:  make([]byte, opt.BufferSize),
 			seek: seek,
 			src:  r,
 		},
@@ -95,7 +98,7 @@ func (r *Reader) ReadString() (string, error) {
 	if r.len < 0 {
 		return "", errFormat("string")
 	}
-	if r.len > maxBufferSize {
+	if r.len > int64(len(r.dec.buf)) {
 		return "", errors.New("ebml: string length too large")
 	}
 	b, err := r.next(int(r.len))
